@@ -1,0 +1,13 @@
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+    font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+
+}
+
+body {
+  background-color: #222; /* opcional, deixa parecido com seu print */
+  color: white!important;
+}
+
