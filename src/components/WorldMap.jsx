@@ -13,6 +13,8 @@ import enLocale from "i18n-iso-countries/langs/en.json";
 import { scaleLinear } from "d3-scale";
 import ReactDOMServer from "react-dom/server";
 import ReactCountryFlag from "react-country-flag";
+import CountryDetails from "./CountryDetails";
+import ReactDOM from "react-dom";
 
 countries.registerLocale(enLocale);
 
@@ -38,6 +40,7 @@ const geoUrl = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 export default function WorldMap() {
   const [data, setData] = useState([]);
   const [indicator, setIndicator] = useState("undernourishment");
+  const [selectedCountry, setSelectedCountry] = useState(null);
 
   useEffect(() => {
     axios
@@ -144,6 +147,7 @@ export default function WorldMap() {
                       hover: { fill: "#999", outline: "none" },
                       pressed: { fill: "#222", outline: "none" },
                     }}
+                    onClick={() => setSelectedCountry(countryName)}
                   />
                 );
               })
@@ -205,6 +209,17 @@ export default function WorldMap() {
       </div>
 
       <Tooltip id="country-tooltip" float />
+      {/* Portal do modal fora da área do mapa */}
+      {ReactDOM.createPortal(
+        selectedCountry ? (
+          <CountryDetails
+            country={selectedCountry}
+            indicator={indicator}
+            onClose={() => setSelectedCountry(null)}
+          />
+        ) : null,
+        document.body
+      )}
     </>
   );
 }
