@@ -45,6 +45,11 @@ export default function CountryDetails({ country, indicator, onClose }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [filteredCountries, setFilteredCountries] = useState([]);
 
+  const MAX_COMPARE = 7;
+
+  // país recém-adicionado (último da lista)
+  const latestCountry = compareCountries[compareCountries.length - 1];
+
   // ============================
   // 🔍 FILTRO DINÂMICO DE PAÍSES
   // ============================
@@ -131,6 +136,58 @@ export default function CountryDetails({ country, indicator, onClose }) {
       }))
       .sort((a, b) => a.year - b.year);
   };
+  // séries "cruas"
+  const mainSeriesRaw = useMemo(
+    () => extractSeries(rows[0]),
+    [rows, indicator]
+  );
+
+  const compareSeriesRaw = useMemo(() => {
+    return compareCountries.map((name) => ({
+      name,
+      data: extractSeries(compareData[name]),
+    }));
+  }, [compareCountries, compareData, indicator]);
+
+  // anos contínuos (min..max) entre TODOS os países
+  // anos contínuos (min..max) entre TODOS os países
+  const allYearsNum = useMemo(() => {
+    const years = new Set();
+    mainSeriesRaw.forEach((d) => years.add(Number(d.year)));
+    compareSeriesRaw.forEach((s) =>
+      s.data.forEach((d) => years.add(Number(d.year)))
+    );
+
+    if (years.size === 0) return [];
+
+    const min = Math.min(...Array.from(years));
+    const max = Math.max(...Array.from(years));
+    const seq = [];
+    for (let y = min; y <= max; y++) seq.push(y);
+    return seq;
+  }, [mainSeriesRaw, compareSeriesRaw]);
+
+  // tabela unificada: { year, [country]: value, [name1]: value, ... }
+  const mergedData = useMemo(() => {
+    // mapeia ano->valor do país principal
+    const mainMap = new Map(
+      mainSeriesRaw.map((d) => [Number(d.year), d.value])
+    );
+    // mapeia ano->valor de cada país comparado
+    const cmpMaps = {};
+    compareSeriesRaw.forEach((s) => {
+      cmpMaps[s.name] = new Map(s.data.map((d) => [Number(d.year), d.value]));
+    });
+
+    return allYearsNum.map((y) => {
+      const row = { year: y };
+      row[country] = mainMap.get(y) ?? null;
+      compareSeriesRaw.forEach((s) => {
+        row[s.name] = cmpMaps[s.name].get(y) ?? null;
+      });
+      return row;
+    });
+  }, [allYearsNum, mainSeriesRaw, compareSeriesRaw, country]);
 
   const mainSeries = useMemo(() => extractSeries(rows[0]), [rows, indicator]);
 
@@ -140,6 +197,31 @@ export default function CountryDetails({ country, indicator, onClose }) {
       data: extractSeries(compareData[name]),
     }));
   }, [compareCountries, compareData, indicator]);
+
+  // ============================
+  // 🧮 Calcula o range total de anos entre todos os países
+  // ============================
+  const allYears = useMemo(() => {
+    const years = new Set();
+
+    // adiciona os anos do país principal
+    mainSeries.forEach((d) => years.add(Number(d.year)));
+
+    // adiciona anos dos países comparados
+    compareSeries.forEach((s) => {
+      s.data.forEach((d) => years.add(Number(d.year)));
+    });
+
+    if (years.size === 0) return [];
+
+    const min = Math.min(...years);
+    const max = Math.max(...years);
+
+    // gera uma sequência contínua, mesmo que algum país falte anos
+    const range = [];
+    for (let y = min; y <= max; y++) range.push(String(y));
+    return range;
+  }, [mainSeries, compareSeries]);
 
   const COLORS = COLOR_PALETTE;
 
@@ -300,35 +382,46 @@ export default function CountryDetails({ country, indicator, onClose }) {
                         <CountryPill name={country} color={COLOR_PALETTE[0]} />
                       </motion.div>
 
-                      {compareCountries.map((c, i) => (
-                        <motion.div
-                          key={c}
-                          variants={{
-                            hidden: { opacity: 0, y: 10 },
-                            visible: { opacity: 1, y: 0 },
-                          }}
-                          transition={{ duration: 0.25, ease: "easeOut" }}
-                          className="w-full"
-                        >
-                          <CountryPill
-                            name={c}
-                            color={
-                              COLOR_PALETTE[(i + 1) % COLOR_PALETTE.length]
-                            }
-                            closable
-                            onClose={() => {
-                              setCompareCountries((prev) =>
-                                prev.filter((x) => x !== c)
-                              );
-                              setCompareData((prev) => {
-                                const copy = { ...prev };
-                                delete copy[c];
-                                return copy;
-                              });
-                            }}
-                          />
-                        </motion.div>
-                      ))}
+                      {(() => {
+                        // gera uma lista auxiliar para atribuir cores apenas aos países com dados
+                        let colorIndex = 1; // 0 é o país principal
+                        return compareCountries.map((c) => {
+                          const series = extractSeries(compareData[c]);
+                          const hasData = series.length > 0;
+                          const color = hasData
+                            ? COLOR_PALETTE[colorIndex++ % COLOR_PALETTE.length]
+                            : "#ccc"; // cor neutra para 'no data'
+
+                          return (
+                            <motion.div
+                              key={c}
+                              variants={{
+                                hidden: { opacity: 0, y: 10 },
+                                visible: { opacity: 1, y: 0 },
+                              }}
+                              transition={{ duration: 0.25, ease: "easeOut" }}
+                              className="w-full"
+                            >
+                              <CountryPill
+                                name={c}
+                                color={color}
+                                hasData={hasData}
+                                closable
+                                onClose={() => {
+                                  setCompareCountries((prev) =>
+                                    prev.filter((x) => x !== c)
+                                  );
+                                  setCompareData((prev) => {
+                                    const copy = { ...prev };
+                                    delete copy[c];
+                                    return copy;
+                                  });
+                                }}
+                              />
+                            </motion.div>
+                          );
+                        });
+                      })()}
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -337,10 +430,20 @@ export default function CountryDetails({ country, indicator, onClose }) {
                 <div className="relative mt-4 w-[80%] flex justify-center">
                   {!isSearching ? (
                     <button
-                      onClick={() => setIsSearching(true)}
-                      className="px-6 py-2.5 rounded-full bg-[#134074] text-white text-sm font-medium shadow-sm transition hover:bg-[#0b2545] hover:scale-[1.03]"
+                      onClick={() => {
+                        if (compareCountries.length < MAX_COMPARE)
+                          setIsSearching(true);
+                      }}
+                      disabled={compareCountries.length >= MAX_COMPARE}
+                      className={`px-6 py-2.5 rounded-full text-sm font-medium shadow-sm transition ${
+                        compareCountries.length >= MAX_COMPARE
+                          ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                          : "bg-[#134074] text-white hover:bg-[#0b2545] hover:scale-[1.03]"
+                      }`}
                     >
-                      Compare with other countries
+                      {compareCountries.length >= MAX_COMPARE
+                        ? "Maximum reached"
+                        : "Compare Countries"}
                     </button>
                   ) : (
                     <div className="relative w-full flex flex-col items-center transition-all duration-300">
@@ -362,12 +465,20 @@ export default function CountryDetails({ country, indicator, onClose }) {
                               key={c}
                               className="px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 cursor-pointer transition"
                               onClick={() => {
-                                setCompareCountries((prev) => [...prev, c]);
-                                setSearchTerm("");
-                                setFilteredCountries([]);
-                                setIsSearching(false);
+                                if (compareCountries.length < MAX_COMPARE) {
+                                  setCompareCountries((prev) => [...prev, c]);
+                                  setSearchTerm("");
+                                  setFilteredCountries([]);
+                                  setIsSearching(false);
+                                }
                               }}
                             >
+                              {compareCountries.length >= MAX_COMPARE && (
+                                <p className="text-xs text-slate-500 mt-1 italic">
+                                  You can compare up to {MAX_COMPARE} countries.
+                                </p>
+                              )}
+
                               {c}
                             </li>
                           ))}
@@ -388,13 +499,24 @@ export default function CountryDetails({ country, indicator, onClose }) {
                   ) : (
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart
+                        key={`${country}-${indicator}`} // 👈 mantém o gráfico montado
+                        data={mergedData}
                         margin={{ top: 20, right: 20, left: 10, bottom: 20 }}
                       >
                         <CartesianGrid stroke="#e2e8f0" vertical={false} />
                         <XAxis
                           dataKey="year"
-                          type="category"
-                          allowDuplicatedCategory={false}
+                          type="number" // 👈 numérico, não categoria
+                          domain={
+                            allYearsNum.length
+                              ? [
+                                  allYearsNum[0],
+                                  allYearsNum[allYearsNum.length - 1],
+                                ]
+                              : [0, 0]
+                          }
+                          ticks={allYearsNum} // 👈 força todos os anos
+                          allowDataOverflow
                           tick={{
                             fontWeight: 600,
                             fontSize: 12,
@@ -402,6 +524,7 @@ export default function CountryDetails({ country, indicator, onClose }) {
                           }}
                           height={28}
                           axisLine={false}
+                          tickFormatter={(v) => String(v)}
                         />
                         <YAxis
                           tick={{
@@ -418,30 +541,59 @@ export default function CountryDetails({ country, indicator, onClose }) {
                             borderRadius: "8px",
                             fontSize: "13px",
                           }}
+                          labelFormatter={(v) => `Year: ${v}`}
                         />
+
+                        {/* linha do país principal */}
                         <Line
-                          data={mainSeries}
-                          dataKey="value"
+                          key={`${country}-${indicator}`}
+                          dataKey={country}
                           type="monotone"
                           stroke={COLOR_PALETTE[0]}
                           strokeWidth={2.3}
                           dot={false}
+                          connectNulls={false}
                           name={country}
+                          isAnimationActive={true}
+                          animationBegin={0}
+                          animationDuration={900}
+                          animationEasing="ease-in-out"
                         />
-                        {compareSeries.map((s, i) => (
-                          <Line
-                            key={s.name}
-                            data={s.data}
-                            dataKey="value"
-                            type="monotone"
-                            stroke={
-                              COLOR_PALETTE[(i + 1) % COLOR_PALETTE.length]
-                            }
-                            strokeWidth={2.3}
-                            dot={false}
-                            name={s.name}
-                          />
-                        ))}
+
+                        {(() => {
+                          let colorIndex = 1;
+                          return compareCountries.map((name) => {
+                            const series = extractSeries(compareData[name]);
+                            const hasData = series.length > 0;
+                            if (!hasData) return null; // 👈 ignora países sem dados
+
+                            const color =
+                              COLOR_PALETTE[
+                                colorIndex++ % COLOR_PALETTE.length
+                              ];
+
+                            return (
+                              <Line
+                                key={`${name}-${indicator}-${
+                                  compareData[name]
+                                    ? Object.keys(compareData[name]).length
+                                    : 0
+                                }`}
+                                dataKey={name}
+                                type="monotone"
+                                stroke={color}
+                                strokeWidth={2.3}
+                                dot={false}
+                                connectNulls={false}
+                                name={name}
+                                isAnimationActive={name === latestCountry}
+                                animationBegin={0}
+                                animationDuration={900}
+                                animationEasing="ease-in-out"
+                              />
+                            );
+                          });
+                        })()}
                       </LineChart>
                     </ResponsiveContainer>
                   )}
@@ -458,11 +610,18 @@ export default function CountryDetails({ country, indicator, onClose }) {
 // =========================
 // COMPONENTE DE PÍLULA
 // =========================
-function CountryPill({ name, color, closable = false, onClose }) {
+function CountryPill({
+  name,
+  color,
+  closable = false,
+  onClose,
+  hasData = true,
+}) {
   const iso2 = (() => {
     const a3 = countries.getAlpha3Code(name, "en");
     return a3 ? countries.alpha3ToAlpha2(a3) : null;
   })();
+
   return (
     <div className="flex items-center justify-between w-full px-4 py-2 rounded-xl border border-slate-200 shadow-sm bg-white hover:shadow-md transition-all duration-200">
       <div className="flex items-center gap-3">
@@ -477,10 +636,14 @@ function CountryPill({ name, color, closable = false, onClose }) {
       </div>
 
       <div className="flex items-center gap-2">
-        <span
-          className="w-3.5 h-3.5 rounded-full"
-          style={{ backgroundColor: color }}
-        />
+        {hasData ? (
+          <span
+            className="w-3.5 h-3.5 rounded-full"
+            style={{ backgroundColor: color }}
+          />
+        ) : (
+          <span className="text-xs text-slate-400 font-medium">(No data)</span>
+        )}
         {closable && (
           <button
             onClick={onClose}

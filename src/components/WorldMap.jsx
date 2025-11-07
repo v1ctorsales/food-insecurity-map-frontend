@@ -147,7 +147,12 @@ export default function WorldMap() {
                       hover: { fill: "#999", outline: "none" },
                       pressed: { fill: "#222", outline: "none" },
                     }}
-                    onClick={() => setSelectedCountry(countryName)}
+                    onClick={() => {
+                      const val = dataMap[countryName];
+                      if (val !== undefined && !isNaN(val)) {
+                        setSelectedCountry(countryName);
+                      }
+                    }}
                   />
                 );
               })
@@ -165,17 +170,43 @@ export default function WorldMap() {
           borderRadius: "8px",
         }}
       >
-        <select
-          value={indicator}
-          onChange={(e) => setIndicator(e.target.value)}
-          style={{ padding: "5px", marginBottom: "10px", display: "block" }}
-        >
-          {Object.entries(indicatorLabels).map(([key, label]) => (
-            <option key={key} value={key}>
-              {label}
-            </option>
-          ))}
-        </select>
+        <div className="relative mb-3">
+          <select
+            id="indicator"
+            value={indicator}
+            onChange={(e) => setIndicator(e.target.value)}
+            className="w-[220px] appearance-none bg-[#ffffff10] text-white text-sm font-medium
+    px-4 py-2.5 rounded-xl border border-white/30 backdrop-blur-sm
+    hover:bg-[#ffffff15] focus:outline-none focus:ring-2 focus:ring-[#40a9ff]/70 focus:border-[#40a9ff]/70
+    transition duration-300"
+          >
+            {Object.entries(indicatorLabels).map(([key, label]) => (
+              <option
+                key={key}
+                value={key}
+                className="text-slate-800 bg-white" // cor interna do menu
+              >
+                {label}
+              </option>
+            ))}
+          </select>
+
+          {/* seta decorativa */}
+          <svg
+            className="absolute right-4 top-[14px] w-4 h-4 text-white/70 pointer-events-none"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M19 9l-7 7-7-7"
+            />
+          </svg>
+        </div>
 
         {[
           { label: "≤ 2.5", color: "#d4e6f0ff" },
