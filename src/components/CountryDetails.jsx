@@ -15,6 +15,12 @@ import ReactCountryFlag from "react-country-flag";
 import countries from "i18n-iso-countries";
 import enLocale from "i18n-iso-countries/langs/en.json";
 import { motion, AnimatePresence } from "framer-motion";
+import {
+  normalizeCountryName,
+  getDisplayName,
+  getGeoJsonName,
+} from "../utils/CountriesDictionary";
+import { geoPath } from "d3-geo";
 
 countries.registerLocale(enLocale);
 
@@ -35,6 +41,9 @@ const COLOR_PALETTE = [
 ];
 
 export default function CountryDetails({ country, indicator, onClose }) {
+  const commonName = getDisplayName(country);
+  const geoJsonName = getGeoJsonName(commonName);
+  const backendName = normalizeCountryName(commonName);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -50,6 +59,9 @@ export default function CountryDetails({ country, indicator, onClose }) {
   // país recém-adicionado (último da lista)
   const latestCountry = compareCountries[compareCountries.length - 1];
 
+  const [activePanel, setActivePanel] = useState("default");
+  const [showComparisons, setShowComparisons] = useState(false);
+
   // ============================
   // 🔍 FILTRO DINÂMICO DE PAÍSES
   // ============================
@@ -60,8 +72,8 @@ export default function CountryDetails({ country, indicator, onClose }) {
         .filter(
           (c) =>
             c.toLowerCase().includes(searchTerm.toLowerCase()) &&
-            c !== country &&
-            !compareCountries.includes(c)
+            normalizeCountryName(c) !== normalizeCountryName(country) &&
+            !compareCountries.includes(normalizeCountryName(c))
         )
         .slice(0, 6);
       setFilteredCountries(matches);
@@ -83,12 +95,14 @@ export default function CountryDetails({ country, indicator, onClose }) {
   useEffect(() => {
     if (!country) return;
     setLoading(true);
+    axios;
     axios
       .get(
         `http://127.0.0.1:8000/data/all_data_merged?country=${encodeURIComponent(
-          country
+          backendName
         )}&indicator=${encodeURIComponent(indicator)}`
       )
+
       .then((res) => {
         const data = Array.isArray(res.data) ? res.data[0] : res.data;
         setRows([data]);
@@ -106,7 +120,7 @@ export default function CountryDetails({ country, indicator, onClose }) {
       axios
         .get(
           `http://127.0.0.1:8000/data/all_data_merged?country=${encodeURIComponent(
-            c
+            normalizeCountryName(c)
           )}&indicator=${encodeURIComponent(indicator)}`
         )
         .then((res) => {
@@ -181,7 +195,7 @@ export default function CountryDetails({ country, indicator, onClose }) {
 
     return allYearsNum.map((y) => {
       const row = { year: y };
-      row[country] = mainMap.get(y) ?? null;
+      row[backendName] = mainMap.get(y) ?? null;
       compareSeriesRaw.forEach((s) => {
         row[s.name] = cmpMaps[s.name].get(y) ?? null;
       });
@@ -230,6 +244,20 @@ export default function CountryDetails({ country, indicator, onClose }) {
   // ============================
   const open = !!country;
 
+  const GEOJSON_NAME_FIX = {
+    Russia: "Russian Federation",
+    "United States": "United States of America",
+    "South Korea": "Republic of Korea",
+    "North Korea": "Democratic People's Republic of Korea",
+    Iran: "Iran, Islamic Republic of",
+    Vietnam: "Viet Nam",
+    "Congo (Kinshasa)": "Democratic Republic of the Congo",
+    "Congo (Brazzaville)": "Republic of the Congo",
+    Egypt: "Egypt",
+    Syria: "Syrian Arab Republic",
+    Laos: "Lao People's Democratic Republic",
+  };
+
   return (
     <Dialog.Root open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <Dialog.Portal container={document.body}>
@@ -267,16 +295,93 @@ export default function CountryDetails({ country, indicator, onClose }) {
             {/* GRID PRINCIPAL */}
             <div className="grid grid-cols-[minmax(260px,30%)_1fr] flex-1 max-md:grid-cols-1 bg-gradient-to-br from-slate-50 to-white">
               {/* Painel esquerdo */}
-              <aside className="p-6 flex flex-col gap-6 items-center max-md:py-8 relative">
-                <h2 className="text-slate-500 uppercase tracking-wide font-semibold text-sm text-center">
-                  {indicator.replaceAll("_", " ")}
-                </h2>
+              <aside className="pt-8 pl-6 pb-6 flex flex-col gap-6 items-center max-md:py-8 relative">
+                {/* 🔹 HEADER (comportamento dinâmico) */}
+                <div className="w-full flex items-center justify-center mb-4">
+                  <div className="flex items-center gap-3 w-[85%] justify-center">
+                    {activePanel === "countries" ||
+                    activePanel === "indicators" ? (
+                      <>
+                        {/* Botão de voltar */}
+                        <button
+                          onClick={() => {
+                            setActivePanel("default");
+                            setShowComparisons(false);
+                          }}
+                          className="px-3 py-2 rounded-full border border-slate-300 text-slate-600 text-sm hover:bg-slate-100 hover:scale-[1.03] transition"
+                        >
+                          ←
+                        </button>
 
-                {/* Silhueta ou comparações */}
+                        {/* Botão Countries */}
+                        <button
+                          onClick={() => {
+                            setActivePanel("countries");
+                            setShowComparisons(true);
+                          }}
+                          className={`flex-1 px-4 py-2.5 rounded-full text-sm font-medium shadow-sm transition ${
+                            activePanel === "countries"
+                              ? "bg-[#134074] text-white cursor-default"
+                              : "bg-white border border-slate-300 text-slate-700 hover:bg-slate-100"
+                          }`}
+                        >
+                          🏳️ Countries
+                        </button>
+
+                        {/* Botão Indicators */}
+                        <button
+                          onClick={() => {
+                            setActivePanel("indicators");
+                            setShowComparisons(false);
+                          }}
+                          className={`flex-1 px-4 py-2.5 rounded-full text-sm font-medium shadow-sm transition ${
+                            activePanel === "indicators"
+                              ? "bg-[#2563eb] text-white cursor-default"
+                              : "bg-white border border-slate-300 text-slate-700 hover:bg-slate-100"
+                          }`}
+                        >
+                          📊 Indicators
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        {/* Modo padrão (sem seta) */}
+                        <button
+                          onClick={() => {
+                            setActivePanel("countries");
+                            setIsSearching(false);
+                            setShowComparisons(true);
+                          }}
+                          className={`flex-1 px-4 py-2.5 rounded-full text-sm font-medium shadow-sm transition ${
+                            activePanel === "countries"
+                              ? "bg-[#134074] text-white scale-[1.03]"
+                              : "bg-white border border-slate-300 text-slate-700 hover:bg-slate-100"
+                          }`}
+                        >
+                          🏳️ Countries
+                        </button>
+
+                        <button
+                          onClick={() => setActivePanel("indicators")}
+                          className={`flex-1 px-4 py-2.5 rounded-full text-sm font-medium shadow-sm transition ${
+                            activePanel === "indicators"
+                              ? "bg-[#2563eb] text-white scale-[1.03]"
+                              : "bg-white border border-slate-300 text-slate-700 hover:bg-slate-100"
+                          }`}
+                        >
+                          📊 Indicators
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* 🔹 CONTEÚDO PRINCIPAL */}
                 <AnimatePresence mode="wait">
-                  {compareCountries.length === 0 ? (
+                  {/* --- MODO PADRÃO --- */}
+                  {activePanel === "default" && (
                     <motion.div
-                      key="single"
+                      key="default"
                       initial={{ opacity: 0, scale: 0.95, y: 10 }}
                       animate={{ opacity: 1, scale: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.95, y: -10 }}
@@ -297,8 +402,8 @@ export default function CountryDetails({ country, indicator, onClose }) {
                             }}
                           />
                         )}
-                        <h1 className="text-slate-900 font-extrabold text-[clamp(16px,1.6vw,26px)] text-center break-words">
-                          {country}
+                        <h1 className="text-slate-900 font-extrabold ...">
+                          {getDisplayName(country)}
                         </h1>
                       </div>
 
@@ -313,10 +418,42 @@ export default function CountryDetails({ country, indicator, onClose }) {
                         >
                           <Geographies geography={geoUrl}>
                             {({ geographies, path }) => {
+                              // 🔹 Tenta obter o nome do GeoJSON corretamente
+                              const geoName = getGeoJsonName(country);
+
+                              console.log({
+                                country,
+                                backend: normalizeCountryName(country),
+                                geojson: getGeoJsonName(country),
+                                display: getDisplayName(
+                                  normalizeCountryName(country)
+                                ),
+                              });
+
+                              // Alguns arquivos do world-atlas não têm "properties.name" padronizado,
+                              // então garantimos uma correspondência por "g.properties.name" ou "g.id"
                               const feature = geographies.find(
-                                (g) => g.properties.name === country
+                                (g) =>
+                                  g.properties.name === geoJsonName ||
+                                  g.id === geoJsonName ||
+                                  g.properties.name?.toLowerCase?.() ===
+                                    geoJsonName.toLowerCase()
                               );
-                              if (!feature) return null;
+
+                              console.log(
+                                "geoName:",
+                                geoName,
+                                "found:",
+                                feature ? "✅ yes" : "❌ no"
+                              );
+
+                              if (!feature) {
+                                console.warn(
+                                  "⚠️ Country not found in GeoJSON:",
+                                  geoName
+                                );
+                                return null;
+                              }
 
                               const [[x0, y0], [x1, y1]] = path.bounds(feature);
                               const w = 320,
@@ -349,56 +486,39 @@ export default function CountryDetails({ country, indicator, onClose }) {
                         </ComposableMap>
                       </div>
                     </motion.div>
-                  ) : (
+                  )}
+
+                  {/* --- MODO COUNTRIES --- */}
+                  {activePanel === "countries" && (
                     <motion.div
-                      key="multi"
-                      initial="hidden"
-                      animate="visible"
-                      exit="hidden"
-                      variants={{
-                        visible: {
-                          opacity: 1,
-                          scale: 1,
-                          y: 0,
-                          transition: {
-                            duration: 0.25,
-                            ease: "easeOut",
-                            staggerChildren: 0.08,
-                            delayChildren: 0.1,
-                          },
-                        },
-                        hidden: { opacity: 0, scale: 0.95, y: 10 },
-                      }}
+                      key="countries"
+                      initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                      transition={{ duration: 0.35, ease: "easeInOut" }}
                       className="flex flex-col items-center gap-3 w-[340px]"
                     >
-                      <motion.div
-                        variants={{
-                          hidden: { opacity: 0, y: 10 },
-                          visible: { opacity: 1, y: 0 },
-                        }}
-                        transition={{ duration: 0.25, ease: "easeOut" }}
-                        className="w-full"
-                      >
-                        <CountryPill name={country} color={COLOR_PALETTE[0]} />
-                      </motion.div>
+                      {/* Pílulas de países */}
+                      <CountryPill
+                        name={getDisplayName(country)}
+                        color={COLOR_PALETTE[0]}
+                      />
 
                       {(() => {
-                        // gera uma lista auxiliar para atribuir cores apenas aos países com dados
-                        let colorIndex = 1; // 0 é o país principal
+                        let colorIndex = 1;
                         return compareCountries.map((c) => {
                           const series = extractSeries(compareData[c]);
                           const hasData = series.length > 0;
                           const color = hasData
                             ? COLOR_PALETTE[colorIndex++ % COLOR_PALETTE.length]
-                            : "#ccc"; // cor neutra para 'no data'
+                            : "#ccc";
 
                           return (
                             <motion.div
                               key={c}
-                              variants={{
-                                hidden: { opacity: 0, y: 10 },
-                                visible: { opacity: 1, y: 0 },
-                              }}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -10 }}
                               transition={{ duration: 0.25, ease: "easeOut" }}
                               className="w-full"
                             >
@@ -422,76 +542,215 @@ export default function CountryDetails({ country, indicator, onClose }) {
                           );
                         });
                       })()}
+
+                      {/* Botão Add country / Input de busca */}
+                      {/* Botão Add country / Input de busca */}
+                      <AnimatePresence mode="wait">
+                        {!isSearching ? (
+                          <motion.button
+                            key="add-btn"
+                            onClick={() => {
+                              if (compareCountries.length < MAX_COMPARE)
+                                setIsSearching(true);
+                            }}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            transition={{ duration: 0.25 }}
+                            disabled={compareCountries.length >= MAX_COMPARE}
+                            className={`mt-3 w-full py-2 rounded-xl border text-sm font-medium transition ${
+                              compareCountries.length >= MAX_COMPARE
+                                ? "bg-gray-200 text-gray-500 border-gray-300 cursor-not-allowed"
+                                : "border-slate-300 text-slate-700 hover:bg-slate-100"
+                            }`}
+                          >
+                            {compareCountries.length >= MAX_COMPARE
+                              ? "Maximum reached"
+                              : "+ Add country"}
+                          </motion.button>
+                        ) : (
+                          <motion.div
+                            key="search-input"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            transition={{ duration: 0.25 }}
+                            className="relative w-full mt-3"
+                          >
+                            <input
+                              autoFocus
+                              type="text"
+                              placeholder="Type a country name..."
+                              value={searchTerm}
+                              onChange={(e) => setSearchTerm(e.target.value)}
+                              onBlur={() =>
+                                setTimeout(() => setIsSearching(false), 150)
+                              }
+                              className="w-full px-4 py-2 rounded-full text-sm text-slate-800 border border-slate-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#134074] bg-white placeholder:text-slate-400"
+                            />
+                            {filteredCountries.length > 0 && (
+                              <ul className="absolute top-full mt-2 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                                {filteredCountries.map((c) => (
+                                  <li
+                                    key={c}
+                                    className="px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 cursor-pointer transition"
+                                    onClick={() => {
+                                      if (
+                                        compareCountries.length < MAX_COMPARE
+                                      ) {
+                                        const normalized =
+                                          normalizeCountryName(c);
+                                        setCompareCountries((prev) => [
+                                          ...prev,
+                                          c,
+                                        ]);
+                                        setSearchTerm("");
+                                        setFilteredCountries([]);
+                                        setIsSearching(false);
+                                      }
+                                    }}
+                                  >
+                                    {c}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </motion.div>
+                  )}
+
+                  {/* --- MODO INDICATORS --- */}
+                  {activePanel === "indicators" && (
+                    <motion.div
+                      key="indicators"
+                      initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                      transition={{ duration: 0.35, ease: "easeInOut" }}
+                      className="flex flex-col items-center gap-4 text-slate-700 h-[340px] w-[340px]"
+                    >
+                      <h3 className="text-base font-semibold text-slate-800 mb-1">
+                        Select up to 2 indicators
+                      </h3>
+
+                      <div className="flex flex-col gap-2 w-[90%]">
+                        {[
+                          {
+                            key: "undernourishment",
+                            label: "Undernourishment",
+                            color: "#2563eb",
+                          },
+                          {
+                            key: "population",
+                            label: "Population",
+                            color: "#f97316",
+                          },
+                          {
+                            key: "poverty",
+                            label: "Poverty Rate",
+                            color: "#40da78ff",
+                          },
+                          {
+                            key: "consumer_price_index",
+                            label: "Consumer Price Index",
+                            color: "#9333ea",
+                          },
+                          {
+                            key: "food_calories",
+                            label: "Food Calories",
+                            color: "#dc2626",
+                          },
+                          {
+                            key: "average_dietary_energy_supply_adequacy",
+                            label: "Dietary Energy Supply Adequacy",
+                            color: "#0b2545",
+                          },
+                        ].map((item) => {
+                          const isSelected = Array.isArray(indicator)
+                            ? indicator.includes(item.key)
+                            : indicator === item.key;
+
+                          return (
+                            <motion.button
+                              key={item.key}
+                              onClick={() => {
+                                setShowComparisons(false);
+                                setIndicator((prev) => {
+                                  const current = Array.isArray(prev)
+                                    ? [...prev]
+                                    : [prev];
+
+                                  // se já estava selecionado → desmarca
+                                  if (current.includes(item.key)) {
+                                    return current.filter(
+                                      (v) => v !== item.key
+                                    );
+                                  }
+
+                                  // se já há 2 selecionados → bloqueia
+                                  if (current.length >= 2) return current;
+
+                                  // adiciona novo
+                                  return [...current, item.key];
+                                });
+                              }}
+                              className={`flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-medium transition border shadow-sm w-full
+              ${
+                isSelected
+                  ? "bg-[#2563eb]/10 border-[#2563eb]/50"
+                  : "bg-white border-slate-300 hover:bg-slate-50"
+              }`}
+                            >
+                              {/* Esquerda: checkbox + nome */}
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="checkbox"
+                                  readOnly
+                                  checked={isSelected}
+                                  className={`w-4 h-4 rounded border transition-all ${
+                                    isSelected
+                                      ? "bg-[#2563eb] border-[#2563eb]"
+                                      : "border-slate-400 bg-transparent"
+                                  }`}
+                                />
+                                <span
+                                  className={`text-left ${
+                                    isSelected
+                                      ? "text-slate-900 font-semibold"
+                                      : "text-slate-700"
+                                  }`}
+                                >
+                                  {item.label}
+                                </span>
+                              </div>
+
+                              {/* Direita: cor do gráfico */}
+                              <span
+                                className="w-4 h-4 rounded-full border border-slate-200 shadow-sm"
+                                style={{ backgroundColor: item.color }}
+                              />
+                            </motion.button>
+                          );
+                        })}
+                      </div>
+
+                      <p className="text-xs text-slate-500 mt-3 text-center leading-tight">
+                        Selecting multiple indicators will overlay their data on
+                        the same chart.
+                      </p>
                     </motion.div>
                   )}
                 </AnimatePresence>
-
-                {/* Botão / input de busca */}
-                <div className="relative mt-4 w-[80%] flex justify-center">
-                  {!isSearching ? (
-                    <button
-                      onClick={() => {
-                        if (compareCountries.length < MAX_COMPARE)
-                          setIsSearching(true);
-                      }}
-                      disabled={compareCountries.length >= MAX_COMPARE}
-                      className={`px-6 py-2.5 rounded-full text-sm font-medium shadow-sm transition ${
-                        compareCountries.length >= MAX_COMPARE
-                          ? "bg-gray-300 text-gray-600 cursor-not-allowed"
-                          : "bg-[#134074] text-white hover:bg-[#0b2545] hover:scale-[1.03]"
-                      }`}
-                    >
-                      {compareCountries.length >= MAX_COMPARE
-                        ? "Maximum reached"
-                        : "Compare Countries"}
-                    </button>
-                  ) : (
-                    <div className="relative w-full flex flex-col items-center transition-all duration-300">
-                      <input
-                        autoFocus
-                        type="text"
-                        placeholder="Type a country name..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        onBlur={() =>
-                          setTimeout(() => setIsSearching(false), 150)
-                        }
-                        className="w-full px-4 py-2 rounded-full text-sm text-slate-800 border border-slate-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#134074] bg-white placeholder:text-slate-400"
-                      />
-                      {filteredCountries.length > 0 && (
-                        <ul className="absolute top-full mt-2 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
-                          {filteredCountries.map((c) => (
-                            <li
-                              key={c}
-                              className="px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 cursor-pointer transition"
-                              onClick={() => {
-                                if (compareCountries.length < MAX_COMPARE) {
-                                  setCompareCountries((prev) => [...prev, c]);
-                                  setSearchTerm("");
-                                  setFilteredCountries([]);
-                                  setIsSearching(false);
-                                }
-                              }}
-                            >
-                              {compareCountries.length >= MAX_COMPARE && (
-                                <p className="text-xs text-slate-500 mt-1 italic">
-                                  You can compare up to {MAX_COMPARE} countries.
-                                </p>
-                              )}
-
-                              {c}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  )}
-                </div>
               </aside>
 
               {/* Painel direito */}
               <main className="p-8 flex flex-col min-w-0">
                 <div className="rounded-2xl flex-1 bg-white border border-slate-200 p-5 relative min-h-[420px] shadow-sm">
+                  <h2 className="absolute top-0 left-1/2 -translate-x-1/2 text-slate-700 font-semibold text-lg tracking-wide">
+                    {indicator.replaceAll("_", " ")}
+                  </h2>
                   {loading ? (
                     <div className="flex items-center justify-center h-full font-medium text-slate-500">
                       Loading data...
@@ -545,55 +804,58 @@ export default function CountryDetails({ country, indicator, onClose }) {
                         />
 
                         {/* linha do país principal */}
+                        {/* linha do país principal */}
                         <Line
-                          key={`${country}-${indicator}`}
-                          dataKey={country}
+                          key={`${backendName}-${indicator}`}
+                          dataKey={backendName} // 👈 usa o nome do backend como chave real
                           type="monotone"
                           stroke={COLOR_PALETTE[0]}
                           strokeWidth={2.3}
                           dot={false}
                           connectNulls={false}
-                          name={country}
+                          name={commonName} // 👈 exibe o nome amigável ("Russia")
                           isAnimationActive={true}
                           animationBegin={0}
                           animationDuration={900}
                           animationEasing="ease-in-out"
                         />
 
-                        {(() => {
-                          let colorIndex = 1;
-                          return compareCountries.map((name) => {
-                            const series = extractSeries(compareData[name]);
-                            const hasData = series.length > 0;
-                            if (!hasData) return null; // 👈 ignora países sem dados
+                        {/* linhas dos países comparados — só aparecem se showComparisons estiver ativo */}
+                        {showComparisons &&
+                          (() => {
+                            let colorIndex = 1;
+                            return compareCountries.map((name) => {
+                              const series = extractSeries(compareData[name]);
+                              const hasData = series.length > 0;
+                              if (!hasData) return null;
 
-                            const color =
-                              COLOR_PALETTE[
-                                colorIndex++ % COLOR_PALETTE.length
-                              ];
+                              const color =
+                                COLOR_PALETTE[
+                                  colorIndex++ % COLOR_PALETTE.length
+                                ];
 
-                            return (
-                              <Line
-                                key={`${name}-${indicator}-${
-                                  compareData[name]
-                                    ? Object.keys(compareData[name]).length
-                                    : 0
-                                }`}
-                                dataKey={name}
-                                type="monotone"
-                                stroke={color}
-                                strokeWidth={2.3}
-                                dot={false}
-                                connectNulls={false}
-                                name={name}
-                                isAnimationActive={name === latestCountry}
-                                animationBegin={0}
-                                animationDuration={900}
-                                animationEasing="ease-in-out"
-                              />
-                            );
-                          });
-                        })()}
+                              return (
+                                <Line
+                                  key={`${name}-${indicator}-${
+                                    compareData[name]
+                                      ? Object.keys(compareData[name]).length
+                                      : 0
+                                  }`}
+                                  dataKey={name}
+                                  type="monotone"
+                                  stroke={color}
+                                  strokeWidth={2.3}
+                                  dot={false}
+                                  connectNulls={false}
+                                  name={name}
+                                  isAnimationActive={name === latestCountry}
+                                  animationBegin={0}
+                                  animationDuration={900}
+                                  animationEasing="ease-in-out"
+                                />
+                              );
+                            });
+                          })()}
                       </LineChart>
                     </ResponsiveContainer>
                   )}
@@ -617,10 +879,25 @@ function CountryPill({
   onClose,
   hasData = true,
 }) {
-  const iso2 = (() => {
-    const a3 = countries.getAlpha3Code(name, "en");
-    return a3 ? countries.alpha3ToAlpha2(a3) : null;
-  })();
+  // 🧠 converte nomes problemáticos manualmente para nomes ISO válidos
+  const normalizedForFlag =
+    {
+      "Korea, Rep.": "South Korea",
+      "Korea, Dem. People's Rep.": "North Korea",
+      "Congo, Dem. Rep.": "Democratic Republic of the Congo",
+      "Congo, Rep.": "Republic of the Congo",
+      "Cote d'Ivoire": "Ivory Coast",
+      "Egypt, Arab Rep.": "Egypt",
+      "Gambia, The": "Gambia",
+      "Iran, Islamic Rep.": "Iran",
+      "Lao PDR": "Laos",
+      "Yemen, Rep.": "Yemen",
+      "Venezuela, RB": "Venezuela",
+      Turkiye: "Turkey",
+    }[name] || name;
+
+  const a3 = countries.getAlpha3Code(normalizedForFlag, "en");
+  const iso2 = a3 ? countries.alpha3ToAlpha2(a3) : null;
 
   return (
     <div className="flex items-center justify-between w-full px-4 py-2 rounded-xl border border-slate-200 shadow-sm bg-white hover:shadow-md transition-all duration-200">
@@ -632,7 +909,9 @@ function CountryPill({
             style={{ width: "1.5em", height: "1.5em", borderRadius: "3px" }}
           />
         )}
-        <span className="font-medium text-slate-700 text-sm">{name}</span>
+        <span className="font-medium text-slate-700 text-sm">
+          {getDisplayName(name)}
+        </span>
       </div>
 
       <div className="flex items-center gap-2">

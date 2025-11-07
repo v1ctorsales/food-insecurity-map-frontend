@@ -15,6 +15,11 @@ import ReactDOMServer from "react-dom/server";
 import ReactCountryFlag from "react-country-flag";
 import CountryDetails from "./CountryDetails";
 import ReactDOM from "react-dom";
+import {
+  normalizeCountryName,
+  getDisplayName,
+  getGeoJsonName,
+} from "../utils/CountriesDictionary";
 
 countries.registerLocale(enLocale);
 
@@ -46,7 +51,6 @@ export default function WorldMap() {
     axios
       .get(`http://127.0.0.1:8000/latest?indicator=${indicator}`)
       .then((res) => {
-        console.log("📊 Dados recebidos do backend:", res.data);
         setData(res.data);
       })
       .catch((err) => console.error("Erro na requisição:", err));
@@ -54,7 +58,8 @@ export default function WorldMap() {
 
   const dataMap = {};
   data.forEach((d) => {
-    dataMap[d["Country Name"]] = d.Value;
+    const normalizedName = normalizeCountryName(d["Country Name"]);
+    dataMap[normalizedName] = d.Value;
   });
 
   const values = data.map((d) => d.Value).filter((v) => v != null);
@@ -88,12 +93,43 @@ export default function WorldMap() {
             {({ geographies }) =>
               geographies.map((geo) => {
                 const countryName = geo.properties.name;
+
+                if (countryName === "North Korea") {
+                  console.log(
+                    "✅ GeoJSON match",
+                    "countryName:",
+                    countryName,
+                    "→ backend:",
+                    normalizeCountryName(countryName),
+                    "→ geojson:",
+                    getGeoJsonName(countryName)
+                  );
+                }
+
+                if (countryName.toLowerCase().includes("korea")) {
+                  console.log("🧭 GeoJSON countryName:", countryName);
+                }
+
+                const normalizedName = normalizeCountryName(countryName);
+                const val = dataMap[normalizedName] ?? dataMap[countryName];
+
+                if (countryName === "North Korea") {
+                  console.log("🇰🇵 DEBUG North Korea", {
+                    countryName,
+                    normalizedName,
+                    "dataMap[normalizedName]": dataMap[normalizedName],
+                    "dataMap[countryName]": dataMap[countryName],
+                    allDataKeys: Object.keys(dataMap).filter((k) =>
+                      k.toLowerCase().includes("korea")
+                    ),
+                  });
+                }
+
                 const iso3 = countries.numericToAlpha3(geo.id);
                 const iso2 = iso3
                   ? countries.alpha3ToAlpha2(iso3, "en")
                   : undefined;
 
-                const val = dataMap[countryName];
                 const fillColor = val !== undefined ? getColor(val) : "#EEE";
 
                 const tooltipContent = ReactDOMServer.renderToStaticMarkup(
@@ -123,7 +159,7 @@ export default function WorldMap() {
                           title={countryName}
                         />
                       )}
-                      <strong>{countryName}</strong>
+                      <strong>{getDisplayName(normalizedName)}</strong>
                     </span>
 
                     {val !== undefined ? (
@@ -148,9 +184,11 @@ export default function WorldMap() {
                       pressed: { fill: "#222", outline: "none" },
                     }}
                     onClick={() => {
-                      const val = dataMap[countryName];
+                      const normalizedName = normalizeCountryName(countryName);
+                      const val =
+                        dataMap[normalizedName] ?? dataMap[countryName];
                       if (val !== undefined && !isNaN(val)) {
-                        setSelectedCountry(countryName);
+                        setSelectedCountry(normalizedName);
                       }
                     }}
                   />
