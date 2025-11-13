@@ -14,6 +14,7 @@ import { scaleLinear } from "d3-scale";
 import ReactDOMServer from "react-dom/server";
 import ReactCountryFlag from "react-country-flag";
 import CountryDetails from "./CountryDetails";
+import InfoModal from "./InfoModal";
 import ReactDOM from "react-dom";
 import {
   normalizeCountryName,
@@ -48,6 +49,7 @@ export default function WorldMap() {
   const [data, setData] = useState([]);
   const [indicator, setIndicator] = useState("undernourishment");
   const [selectedCountry, setSelectedCountry] = useState(null);
+  const [showInfoModal, setShowInfoModal] = useState(false);
 
   useEffect(() => {
     axios
@@ -210,42 +212,74 @@ export default function WorldMap() {
           borderRadius: "8px",
         }}
       >
-        <div className="relative mb-3">
-          <select
-            id="indicator"
-            value={indicator}
-            onChange={(e) => setIndicator(e.target.value)}
-            className="w-[220px] appearance-none bg-[#ffffff10] text-white text-sm font-medium
-    px-4 py-2.5 rounded-xl border border-white/30 backdrop-blur-sm
-    hover:bg-[#ffffff15] focus:outline-none focus:ring-2 focus:ring-[#40a9ff]/70 focus:border-[#40a9ff]/70
-    transition duration-300"
+        {/* Linha com ícone + select */}
+        <div className="relative mb-3 flex items-center gap-3">
+          {/* Ícone de informação */}
+          <button
+            onClick={() => setShowInfoModal(true)}
+            className="text-white/80 hover:text-white transition transform hover:scale-110 focus:outline-none"
+            title="About this map"
+            style={{
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
           >
-            {Object.entries(indicatorLabels).map(([key, label]) => (
-              <option
-                key={key}
-                value={key}
-                className="text-slate-800 bg-white" // cor interna do menu
-              >
-                {label}
-              </option>
-            ))}
-          </select>
-
-          {/* seta decorativa */}
-          <svg
-            className="absolute right-4 top-[14px] w-4 h-4 text-white/70 pointer-events-none"
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
               strokeWidth={2}
-              d="M19 9l-7 7-7-7"
-            />
-          </svg>
+              stroke="currentColor"
+              className="w-5 h-5"
+            >
+              <circle cx="12" cy="12" r="9" stroke="currentColor" />
+              <line x1="12" y1="16" x2="12" y2="12" stroke="currentColor" />
+              <circle cx="12" cy="8" r="0.8" fill="currentColor" />
+            </svg>
+          </button>
+
+          {/* Select de indicador */}
+          <div className="relative flex-1">
+            <select
+              id="indicator"
+              value={indicator}
+              onChange={(e) => setIndicator(e.target.value)}
+              className="w-[220px] appearance-none bg-[#ffffff10] text-white text-sm font-medium
+      px-4 py-2.5 rounded-xl border border-white/30 backdrop-blur-sm
+      hover:bg-[#ffffff15] focus:outline-none focus:ring-2 focus:ring-[#40a9ff]/70 focus:border-[#40a9ff]/70
+      transition duration-300"
+            >
+              {Object.entries(indicatorLabels).map(([key, label]) => (
+                <option
+                  key={key}
+                  value={key}
+                  className="text-slate-800 bg-white"
+                >
+                  {label}
+                </option>
+              ))}
+            </select>
+
+            {/* seta decorativa */}
+            <svg
+              className="absolute right-4 top-[14px] w-4 h-4 text-white/70 pointer-events-none"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 9l-7 7-7-7"
+              />
+            </svg>
+          </div>
         </div>
 
         {[
@@ -278,6 +312,13 @@ export default function WorldMap() {
           </div>
         ))}
       </div>
+
+      {/* Modal de informação */}
+      {showInfoModal &&
+        ReactDOM.createPortal(
+          <InfoModal onClose={() => setShowInfoModal(false)} />,
+          document.body
+        )}
 
       <Tooltip id="country-tooltip" float />
       {/* Portal do modal fora da área do mapa */}

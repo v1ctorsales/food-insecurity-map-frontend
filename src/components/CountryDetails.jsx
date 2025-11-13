@@ -419,9 +419,15 @@ export default function CountryDetails({ country, indicator, onClose }) {
             {/* GRID PRINCIPAL */}
             <div className="grid grid-cols-[minmax(260px,30%)_1fr] flex-1 max-md:grid-cols-1 bg-gradient-to-br from-slate-50 to-white">
               {/* Painel esquerdo */}
-              <aside className="pt-8 pl-6 pb-6 flex flex-col gap-6 items-center max-md:py-8 relative">
+              <aside className="pt-4 pl-6 pb-6 flex flex-col gap-6 items-center max-md:py-8 relative">
                 {/* 🔹 HEADER (comportamento dinâmico) */}
-                <div className="w-full flex items-center justify-center mb-4">
+                <div className="w-full flex flex-col items-center mb-4">
+                  {/* Título "Comparison" */}
+                  <h2 className="text-slate-600 font-semibold tracking-wide text-sm mb-2">
+                    Compare
+                  </h2>
+
+                  {/* Linha de botões */}
                   <div className="flex items-center gap-3 w-[85%] justify-center">
                     {activePanel === "countries" ||
                     activePanel === "indicators" ? (
@@ -864,11 +870,6 @@ export default function CountryDetails({ country, indicator, onClose }) {
                           );
                         })}
                       </div>
-
-                      <p className="text-xs text-slate-500 mt-3 text-center leading-tight">
-                        Selecting multiple indicators will overlay their data on
-                        the same chart.
-                      </p>
                     </motion.div>
                   )}
                 </AnimatePresence>
