@@ -44,6 +44,7 @@ const indicatorLabels = {
 };
 
 const geoUrl = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
+const API = import.meta.env.VITE_API_BASE_URL;
 
 export default function WorldMap() {
   const [data, setData] = useState([]);
@@ -53,7 +54,7 @@ export default function WorldMap() {
 
   useEffect(() => {
     axios
-      .get(`http://127.0.0.1:8000/latest?indicator=${indicator}`)
+      .get(`${API}/latest?indicator=${indicator}`)
       .then((res) => {
         setData(res.data);
       })

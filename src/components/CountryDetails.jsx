@@ -20,7 +20,7 @@ import {
   getDisplayName,
   getGeoJsonName,
 } from "../utils/CountriesDictionary";
-import { geoPath } from "d3-geo";
+const API = import.meta.env.VITE_API_BASE_URL;
 
 countries.registerLocale(enLocale);
 
@@ -104,7 +104,7 @@ export default function CountryDetails({ country, indicator, onClose }) {
     axios;
     axios
       .get(
-        `http://127.0.0.1:8000/data/all_data_merged?country=${encodeURIComponent(
+        `${API}/data/all_data_merged?country=${encodeURIComponent(
           backendName
         )}&indicator=${encodeURIComponent(indicator)}`
       )
@@ -125,7 +125,7 @@ export default function CountryDetails({ country, indicator, onClose }) {
       if (compareData[c]) return; // já baixado
       axios
         .get(
-          `http://127.0.0.1:8000/data/all_data_merged?country=${encodeURIComponent(
+          `${API}/data/all_data_merged?country=${encodeURIComponent(
             normalizeCountryName(c)
           )}&indicator=${encodeURIComponent(indicator)}`
         )
@@ -150,7 +150,7 @@ export default function CountryDetails({ country, indicator, onClose }) {
 
     setLoadingIndicators(true);
     axios
-      .get(`http://127.0.0.1:8000/indicators?${params.toString()}`)
+      .get(`${API}/indicators?${params.toString()}`)
       .then((res) => {
         setIndicatorData(res.data);
       })
