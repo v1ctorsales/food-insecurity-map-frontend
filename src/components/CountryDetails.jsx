@@ -262,13 +262,17 @@ export default function CountryDetails({ country, indicator, onClose }) {
   // 📊 FETCH DE INDICADORES MÚLTIPLOS
   // ============================
   useEffect(() => {
-    // só chama a API quando tiver exatamente DOIS indicadores
-    if (!country || selectedIndicators.length !== 2) return;
+    // MODIFICADO: Agora aceitamos 1 ou 2 indicadores (antes era !== 2)
+    // Se tiver 1, usamos os dados locais. Se 0, não faz nada.
+    if (!country || selectedIndicators.length !== 2) {
+      // Se não for comparar 2, limpamos os dados da API de comparação para evitar confusão
+      setIndicatorData(null);
+      return;
+    }
 
     const params = new URLSearchParams();
     params.append("country", backendName);
 
-    // aqui mandamos DIRETO os nomes esperados pelo backend
     selectedIndicators.forEach((ind) => {
       params.append("indicators", ind);
     });
@@ -472,18 +476,54 @@ export default function CountryDetails({ country, indicator, onClose }) {
   }, [indicatorData]);
 
   const normalizedIndicatorChartData = useMemo(() => {
-    if (!multiIndicatorChartData) return [];
-
-    return multiIndicatorChartData.map((row) => {
-      const newRow = { year: row.year };
-
-      selectedIndicators.forEach((ind) => {
-        newRow[ind] = row[ind] != null ? convertForChart(ind, row[ind]) : null;
+    // CENÁRIO A: 2 Indicadores (Usa dados vindos da API de comparação)
+    if (selectedIndicators.length === 2 && multiIndicatorChartData) {
+      return multiIndicatorChartData.map((row) => {
+        const newRow = { year: row.year };
+        selectedIndicators.forEach((ind) => {
+          newRow[ind] =
+            row[ind] != null ? convertForChart(ind, row[ind]) : null;
+        });
+        return newRow;
       });
+    }
 
-      return newRow;
-    });
-  }, [multiIndicatorChartData, selectedIndicators]);
+    // CENÁRIO B: 1 Indicador (Usa dados locais de rows[0])
+    if (selectedIndicators.length === 1 && rows.length > 0) {
+      const indKey = selectedIndicators[0]; // ex: "gdp"
+      const apiPrefix = INDICATOR_MAP[indKey]; // ex: "gdp_percapita"
+      const dataObj = rows[0];
+
+      if (!dataObj) return [];
+
+      // Regex para encontrar chaves como "gdp_percapita_2001"
+      const regex = new RegExp(`^${apiPrefix}_(\\d{4})$`);
+
+      const localSeries = Object.keys(dataObj)
+        .filter((k) => regex.test(k) && dataObj[k] != null)
+        .map((k) => {
+          const year = Number(k.match(regex)[1]);
+          const rawValue = Number(dataObj[k]);
+
+          // Cria o objeto no formato que o gráfico espera: { year: 2001, gdp: 123 }
+          return {
+            year,
+            [indKey]: convertForChart(indKey, rawValue), // Aplica conversão (k, M, etc)
+          };
+        })
+        .sort((a, b) => a.year - b.year);
+
+      return localSeries;
+    }
+
+    // Nenhum indicador selecionado ou dados carregando
+    return [];
+  }, [
+    selectedIndicators,
+    multiIndicatorChartData,
+    rows,
+    country, // dependência para garantir atualização ao trocar país
+  ]);
 
   const selectedScatterPoint = useMemo(() => {
     return indexedScatterData.find((d) => d.country === backendName);
@@ -532,7 +572,7 @@ export default function CountryDetails({ country, indicator, onClose }) {
     mean_inflation: "Mean Inflation Rate (%)",
     max_inflation: "Maximum Inflation Shock (%)",
     poverty: "Poverty Rate (%)",
-    population: "Population (%)",
+    population: "Population (Millions of People)",
     undernourishment: "Undernourishment (%)",
   };
 
@@ -603,7 +643,8 @@ export default function CountryDetails({ country, indicator, onClose }) {
       : [0, 0];
 
   // Indicators → domínio baseado nos anos de todos os indicadores
-  const indYears = (multiIndicatorChartData ?? []).map((d) => d.year);
+  const indYears = (normalizedIndicatorChartData ?? []).map((d) => d.year);
+
   const indDomain =
     indYears.length > 0
       ? [Math.min(...indYears), Math.max(...indYears)]
@@ -1035,8 +1076,6 @@ export default function CountryDetails({ country, indicator, onClose }) {
                             item.key
                           );
 
-                          // Verifica se o indicador está na lista de "Válidos"
-                          // Se a lista estiver vazia (carregando), assumimos true por segurança, senão usamos o Set.
                           const hasData =
                             availableIndicators.size === 0 ||
                             availableIndicators.has(item.key);
@@ -1378,76 +1417,17 @@ export default function CountryDetails({ country, indicator, onClose }) {
                       {/* ===================== INDICATORS GRAPH ===================== */}
                       {activePanel === "indicators" && (
                         <ResponsiveContainer width="100%" height="100%">
-                          {selectedIndicators.length === 0 ? (
-                            // 🟡 nenhum selecionado
-                            <div className="flex items-center justify-center h-full font-medium text-slate-500"></div>
-                          ) : selectedIndicators.length === 1 ? (
-                            // 🟢 apenas 1 → renderiza o mesmo gráfico local
-                            <LineChart
-                              key={`${country}-${selectedIndicators[0]}-single`}
-                              data={normalizedMergedData}
-                              margin={{
-                                top: 50,
-                                right: 20,
-                                left: 10,
-                                bottom: 20,
-                              }}
-                            >
-                              <CartesianGrid
-                                stroke="#e2e8f0"
-                                vertical={false}
-                              />
-                              <XAxis
-                                dataKey="year"
-                                type="number"
-                                domain={countryDomain}
-                                ticks={countryYears}
-                                allowDecimals={false}
-                                tick={{
-                                  fontWeight: 600,
-                                  fontSize: 12,
-                                  fill: "#334155",
-                                }}
-                                axisLine={false}
-                                tickFormatter={(v) => String(v)}
-                              />
-                              <YAxis
-                                tick={{
-                                  fontWeight: 600,
-                                  fontSize: 12,
-                                  fill: "#334155",
-                                }}
-                                axisLine={false}
-                                tickFormatter={(v) => formatValue(indicator, v)}
-                              />
-                              <RechartsTooltip
-                                contentStyle={{
-                                  backgroundColor: "#fff",
-                                  border: "1px solid #e2e8f0",
-                                  borderRadius: "8px",
-                                  fontSize: "13px",
-                                }}
-                                labelFormatter={(v) => `Year: ${v}`}
-                                formatter={(v) => [
-                                  formatValue(indicator, v),
-                                  indicator,
-                                ]}
-                              />
-
-                              <Line
-                                dataKey={backendName}
-                                type="monotone"
-                                stroke={COLOR_PALETTE[0]}
-                                strokeWidth={2.3}
-                                dot={false}
-                                connectNulls
-                                name={getDisplayName(country)}
-                              />
-                            </LineChart>
+                          {loadingIndicators ? (
+                            <div className="flex items-center justify-center h-full text-slate-400 text-sm animate-pulse">
+                              Loading new data...
+                            </div>
+                          ) : selectedIndicators.length === 0 ? (
+                            // 🟡 Nenhum selecionado
+                            <div className="flex items-center justify-center h-full font-medium text-slate-400"></div>
                           ) : (
-                            // 🔵 dois indicadores → gráfico comparativo via backend
+                            // 🟢 1 ou 2 indicadores selecionados (Lógica Unificada)
                             <LineChart
-                              key={`${country}-indicators`}
+                              key={`${country}-${selectedIndicators.join("-")}`} // Força animação ao mudar seleção
                               data={normalizedIndicatorChartData}
                               margin={{
                                 top: 50,
@@ -1460,6 +1440,7 @@ export default function CountryDetails({ country, indicator, onClose }) {
                                 stroke="#e2e8f0"
                                 vertical={false}
                               />
+
                               <XAxis
                                 dataKey="year"
                                 type="number"
@@ -1474,6 +1455,7 @@ export default function CountryDetails({ country, indicator, onClose }) {
                                 axisLine={false}
                                 tickFormatter={(v) => String(v)}
                               />
+
                               <YAxis
                                 tick={{
                                   fontWeight: 600,
@@ -1482,12 +1464,11 @@ export default function CountryDetails({ country, indicator, onClose }) {
                                 }}
                                 axisLine={false}
                                 tickFormatter={(v) => {
-                                  // O eixo é compartilhado por até 2 indicadores.
-                                  // Escolhemos o formatador do PRIMEIRO indicador.
-                                  const main = selectedIndicators[0];
-                                  return formatValue(main, v);
+                                  // Usa o formatador do primeiro indicador selecionado para o eixo Y
+                                  return formatValue(selectedIndicators[0], v);
                                 }}
                               />
+
                               <RechartsTooltip
                                 contentStyle={{
                                   backgroundColor: "#fff",
@@ -1497,32 +1478,37 @@ export default function CountryDetails({ country, indicator, onClose }) {
                                 }}
                                 labelFormatter={(v) => `Year: ${v}`}
                                 formatter={(value, name, props) => {
-                                  const key = props?.dataKey; // key REAL: "food_calories", "gdp", "population"
+                                  // O dataKey aqui é o nome do indicador (ex: "population")
+                                  const key = props.dataKey;
                                   return [
-                                    formatValue(key, value), // ✔ usa o conversor correto (k, M, k USD)
-                                    key.replaceAll("_", " "), // ✔ label correto
+                                    formatValue(key, value),
+                                    // Usa o dicionário de títulos que criamos antes, ou formata o texto
+                                    getChartTitle
+                                      ? getChartTitle(key)
+                                      : key.replaceAll("_", " "),
                                   ];
                                 }}
                               />
-                              {indicatorData?.details &&
-                                Object.keys(indicatorData.details || {}).map(
-                                  (ind, idx) => (
-                                    <Line
-                                      key={ind}
-                                      dataKey={ind}
-                                      type="monotone"
-                                      stroke={
-                                        COLOR_PALETTE[
-                                          idx % COLOR_PALETTE.length
-                                        ]
-                                      }
-                                      strokeWidth={2.3}
-                                      dot={false}
-                                      connectNulls
-                                      name={ind.replaceAll("_", " ")}
-                                    />
-                                  )
-                                )}
+
+                              {/* Renderiza dinamicamente as linhas baseadas no que está selecionado */}
+                              {selectedIndicators.map((ind, idx) => (
+                                <Line
+                                  key={ind}
+                                  dataKey={ind}
+                                  type="monotone"
+                                  stroke={
+                                    // Garante que a primeira linha seja sempre azul e a segunda laranja
+                                    idx === 0
+                                      ? COLOR_PALETTE[0]
+                                      : COLOR_PALETTE[1]
+                                  }
+                                  strokeWidth={2.3}
+                                  dot={false}
+                                  connectNulls
+                                  activeDot={{ r: 6 }}
+                                  name={ind} // Será sobrescrito pelo formatter do tooltip
+                                />
+                              ))}
                             </LineChart>
                           )}
                         </ResponsiveContainer>
