@@ -295,6 +295,44 @@ export default function CountryDetails({ country, indicator, onClose }) {
   // ============================
   // ⚙️ UTILIDADES
   // ============================
+  // Função para calcular Correlação de Pearson
+  const calculatePearsonCorrelation = (data, key1, key2) => {
+    if (!data || data.length < 2) return null;
+
+    let sum1 = 0,
+      sum2 = 0,
+      sum1Sq = 0,
+      sum2Sq = 0,
+      pSum = 0;
+    let n = 0;
+
+    data.forEach((row) => {
+      const x = row[key1];
+      const y = row[key2];
+
+      // Só processa se ambos os valores existirem para aquele ano
+      if (typeof x === "number" && typeof y === "number") {
+        sum1 += x;
+        sum2 += y;
+        sum1Sq += x * x;
+        sum2Sq += y * y;
+        pSum += x * y;
+        n++;
+      }
+    });
+
+    if (n === 0) return 0;
+
+    // Fórmula do Coeficiente de Pearson
+    const num = pSum - (sum1 * sum2) / n;
+    const den = Math.sqrt(
+      (sum1Sq - (sum1 * sum1) / n) * (sum2Sq - (sum2 * sum2) / n)
+    );
+
+    if (den === 0) return 0; // Evita divisão por zero
+    return num / den;
+  };
+
   const getIso2 = (name) => {
     const a3 = countries.getAlpha3Code(name, "en");
     return a3 ? countries.alpha3ToAlpha2(a3) : null;
@@ -653,6 +691,27 @@ export default function CountryDetails({ country, indicator, onClose }) {
   const formatPopulationTick = (v) => {
     if (v == null) return "";
     return v.toFixed(1).replace(".0", "") + "M";
+  };
+
+  const correlationValue = useMemo(() => {
+    // Só calcula se tiver exatamente 2 indicadores selecionados
+    if (selectedIndicators.length !== 2) return null;
+
+    return calculatePearsonCorrelation(
+      normalizedIndicatorChartData,
+      selectedIndicators[0],
+      selectedIndicators[1]
+    );
+  }, [normalizedIndicatorChartData, selectedIndicators]);
+
+  // Helper para texto explicativo
+  const getCorrelationText = (val) => {
+    if (val === null) return "";
+    if (val > 0.7) return "Strong Positive Correlation";
+    if (val > 0.3) return "Moderate Positive Correlation";
+    if (val > -0.3) return "No Significant Correlation";
+    if (val > -0.7) return "Moderate Negative Correlation";
+    return "Strong Negative Correlation";
   };
 
   return (
@@ -1032,7 +1091,7 @@ export default function CountryDetails({ country, indicator, onClose }) {
                       animate={{ opacity: 1, scale: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.95, y: -10 }}
                       transition={{ duration: 0.35, ease: "easeInOut" }}
-                      className="flex flex-col items-center gap-4 text-slate-700 h-[340px] w-[340px]"
+                      className="flex flex-col items-center text-slate-700 h-[340px] w-[340px]"
                     >
                       <div className="w-[90%] mb-2">
                         <CountryPill
@@ -1048,7 +1107,7 @@ export default function CountryDetails({ country, indicator, onClose }) {
                         />
                       </div>
 
-                      <h3 className="text-base font-semibold text-slate-800 mb-1">
+                      <h3 className="text-base font-semibold text-slate-800 mb-1 mt-4">
                         Select up to 2 indicators
                       </h3>
 
@@ -1146,9 +1205,7 @@ export default function CountryDetails({ country, indicator, onClose }) {
                                 >
                                   {item.label}
                                   {!hasData && (
-                                    <span className="text-xs ml-2 font-normal no-underline opacity-70">
-                                      (Insufficient data)
-                                    </span>
+                                    <span className="text-xs ml-2 font-normal no-underline opacity-70"></span>
                                   )}
                                 </span>
                               </div>
@@ -1169,6 +1226,56 @@ export default function CountryDetails({ country, indicator, onClose }) {
                           );
                         })}
                       </div>
+                      {/* ================= SEÇÃO DE CORRELAÇÃO ================= */}
+                      {selectedIndicators.length === 2 &&
+                        correlationValue !== null && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            className="w-[90%] mt-2 pt-4 border-t border-slate-200 flex flex-col gap-2"
+                          >
+                            <div className="flex justify-between items-end">
+                              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                Pearson Correlation
+                              </span>
+                              <span
+                                className={`text-lg font-bold ${
+                                  correlationValue > 0
+                                    ? "text-emerald-600"
+                                    : "text-rose-600"
+                                }`}
+                              >
+                                {correlationValue.toFixed(2)}
+                              </span>
+                            </div>
+
+                            {/* Barra visual (-1 a 1) */}
+                            <div className="relative h-2 bg-slate-100 rounded-full w-full overflow-hidden">
+                              {/* Linha central (zero) */}
+                              <div className="absolute left-1/2 top-0 bottom-0 w-[1px] bg-slate-300 z-10" />
+
+                              {/* Barra de progresso */}
+                              <div
+                                className={`absolute top-0 bottom-0 transition-all duration-500 ${
+                                  correlationValue > 0
+                                    ? "bg-emerald-400"
+                                    : "bg-rose-400"
+                                }`}
+                                style={{
+                                  left:
+                                    correlationValue > 0
+                                      ? "50%"
+                                      : `${(1 + correlationValue) * 50}%`,
+                                  width: `${Math.abs(correlationValue) * 50}%`,
+                                }}
+                              />
+                            </div>
+
+                            <span className="text-xs text-slate-500 text-right italic">
+                              {getCorrelationText(correlationValue)}
+                            </span>
+                          </motion.div>
+                        )}
                     </motion.div>
                   )}
                 </AnimatePresence>

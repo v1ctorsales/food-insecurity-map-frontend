@@ -140,7 +140,7 @@ const indicatorLabels = {
   poverty: "Poverty Rate (Latest)",
   undernourishment: "Undernourishment (2022)",
   population: "Population (2024)",
-  energy_suply_adeq: "Energy Supply Adequacy (2023)",
+  energy_suply_adeq: "Energy Supply Adeq. (2023)",
   food_calories: "Food Calories (2022)",
   gdp: "GDP per Capita (2024)",
 };
@@ -323,34 +323,6 @@ export default function WorldMap() {
       >
         {/* Linha com ícone + select */}
         <div className="relative mb-3 flex items-center gap-3">
-          {/* Ícone de informação */}
-          <button
-            onClick={() => setShowInfoModal(true)}
-            className="text-white/80 hover:text-white transition transform hover:scale-110 focus:outline-none"
-            title="About this map"
-            style={{
-              background: "transparent",
-              border: "none",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={2}
-              stroke="currentColor"
-              className="w-5 h-5"
-            >
-              <circle cx="12" cy="12" r="9" stroke="currentColor" />
-              <line x1="12" y1="16" x2="12" y2="12" stroke="currentColor" />
-              <circle cx="12" cy="8" r="0.8" fill="currentColor" />
-            </svg>
-          </button>
-
           {/* Select de indicador */}
           <div className="relative flex-1">
             <select
@@ -375,7 +347,7 @@ export default function WorldMap() {
 
             {/* seta decorativa */}
             <svg
-              className="absolute right-4 top-[14px] w-4 h-4 text-white/70 pointer-events-none"
+              className="absolute right-[0.6rem] top-[14px] w-4 h-4 text-white/70 pointer-events-none"
               xmlns="http://www.w3.org/2000/svg"
               fill="none"
               viewBox="0 0 24 24"
@@ -432,6 +404,34 @@ export default function WorldMap() {
               }}
             />
             <span style={{ color: "white", fontSize: 12 }}>No data</span>
+            {/* Ícone de informação */}
+            <button
+              onClick={() => setShowInfoModal(true)}
+              className="text-white/80 hover:text-white transition transform hover:scale-110 focus:outline-none"
+              title="About this map"
+              style={{
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                marginLeft: "auto",
+              }}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={2}
+                stroke="currentColor"
+                className="w-5 h-5"
+              >
+                <circle cx="12" cy="12" r="9" stroke="currentColor" />
+                <line x1="12" y1="16" x2="12" y2="12" stroke="currentColor" />
+                <circle cx="12" cy="8" r="0.8" fill="currentColor" />
+              </svg>
+            </button>
           </div>
         </div>
       </div>
