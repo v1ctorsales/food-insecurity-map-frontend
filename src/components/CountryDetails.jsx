@@ -12,6 +12,9 @@ import {
   ScatterChart,
   Scatter,
   ReferenceLine,
+  BarChart,
+  Bar,
+  Cell,
 } from "recharts";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 import ReactCountryFlag from "react-country-flag";
@@ -178,39 +181,65 @@ export default function CountryDetails({ country, indicator, onClose }) {
   // ============================
   // Quantos anos de dados são necessários para considerar o indicador "útil"?
   const MIN_DATA_POINTS = 3;
+  const [correlations, setCorrelations] = useState([]);
+  const CORRELATION_LABELS = {
+    gdp_percapita: "Availability",
+    max_inflation_shock: "Access",
+    energy_supply_adeq: "Utilization",
+    poverty: "Country-based context",
+  };
 
   useEffect(() => {
     if (!country) return;
     setLoading(true);
-    setAvailableIndicators(new Set()); // Limpa antes de buscar
+    setAvailableIndicators(new Set());
 
     axios
       .get(
         `${API}/data/all_data_merged?country=${backendName}&indicator=${INDICATOR_MAP[indicator]}`
       )
       .then((res) => {
-        const data = Array.isArray(res.data) ? res.data[0] : res.data;
-        setRows([data]);
+        const payload = res.data;
+        const historicalList = payload.data;
+        const correlationData = payload.correlations; // Objeto cru: { key: value }
 
+        // --- LÓGICA DE TRATAMENTO DO GRÁFICO ---
+        if (correlationData) {
+          const formattedCorrelations = Object.entries(correlationData)
+            .filter(([key, value]) => {
+              // 1. Filtra: Remove 'country_name', garante que é número
+              // E garante que a chave existe no nosso mapa de nomes (CORRELATION_LABELS)
+              return (
+                key !== "country_name" &&
+                typeof value === "number" &&
+                CORRELATION_LABELS[key] !== undefined
+              );
+            })
+            .map(([key, value]) => {
+              // 2. Transforma em valor absoluto (módulo) e porcentagem
+              const absValue = Math.abs(value);
+              const percentValue = absValue * 100;
+
+              return {
+                name: CORRELATION_LABELS[key], // Usa o nome novo
+                // Arredonda para 2 casas e converte para número novamente para o gráfico ler
+                value: parseFloat(percentValue.toFixed(2)),
+              };
+            })
+            .sort((a, b) => b.value - a.value); // Ordena do maior % para o menor
+
+          setCorrelations(formattedCorrelations);
+        }
+        // ---------------------------------------
+
+        const rowData = Array.isArray(historicalList)
+          ? historicalList[0]
+          : historicalList;
+        setRows([rowData]);
+
+        // ... (resto da sua lógica de validIndicators continua igual) ...
         const validIndicators = new Set();
-
-        Object.entries(INDICATOR_MAP).forEach(([uiKey, apiPrefix]) => {
-          // Conta quantos anos têm valor diferente de null
-          const count = Object.keys(data).filter((dataKey) => {
-            return (
-              dataKey.startsWith(`${apiPrefix}_`) && data[dataKey] !== null
-            );
-          }).length;
-
-          // DEBUG: Ver quantos pontos cada indicador tem
-          console.log(`📊 ${uiKey}: ${count} pontos de dados.`);
-
-          // Só adiciona se tiver mais que o mínimo necessário
-          if (count >= MIN_DATA_POINTS) {
-            validIndicators.add(uiKey);
-          }
-        });
-
+        // ...
         setAvailableIndicators(validIndicators);
       })
       .catch((err) => console.error("Error fetching main country:", err))
@@ -244,6 +273,7 @@ export default function CountryDetails({ country, indicator, onClose }) {
   useEffect(() => {
     compareCountries.forEach((c) => {
       if (compareData[c]) return; // já baixado
+
       axios
         .get(
           `${API}/data/all_data_merged?country=${encodeURIComponent(
@@ -251,8 +281,23 @@ export default function CountryDetails({ country, indicator, onClose }) {
           )}&indicator=${encodeURIComponent(indicator)}`
         )
         .then((res) => {
-          const data = Array.isArray(res.data) ? res.data[0] : res.data;
-          setCompareData((prev) => ({ ...prev, [c]: data }));
+          // --- MUDANÇA AQUI ---
+          // 1. O axios retorna o objeto inteiro { data: [...], correlations: {...} }
+          const payload = res.data;
+
+          // 2. A lista histórica (que o gráfico usa) está dentro de .data
+          const historicalList = payload.data;
+
+          // 3. Aplica a lógica antiga de extrair o primeiro item se for array
+          const rowData = Array.isArray(historicalList)
+            ? historicalList[0]
+            : historicalList;
+
+          // 4. Atualiza o estado apenas com os dados históricos (para não quebrar o gráfico)
+          setCompareData((prev) => ({ ...prev, [c]: rowData }));
+
+          // OBS: Se você quiser usar as correlações dos países comparados no futuro,
+          // elas estão disponíveis em: payload.correlations
         })
         .catch((err) => console.error(`Error fetching ${c}:`, err));
     });
@@ -946,6 +991,60 @@ export default function CountryDetails({ country, indicator, onClose }) {
                             }}
                           </Geographies>
                         </ComposableMap>
+                      </div>
+                      <h4 className="text-sm font-semibold text-slate-500 mb-1 mt-4">
+                        What impacts starvation the most in {country}?
+                      </h4>
+                      <div className="flex-1 w-full border border-slate-200 rounded-2xl p-4 bg-white shadow-sm">
+                        {correlations.length > 0 ? (
+                          <ResponsiveContainer
+                            width="100%"
+                            height={correlations.length * 30}
+                          >
+                            <BarChart
+                              layout="vertical"
+                              data={correlations}
+                              margin={{
+                                top: 5,
+                                right: 30,
+                                left: 20,
+                                bottom: 5,
+                              }}
+                            >
+                              <CartesianGrid
+                                strokeDasharray="3 3"
+                                horizontal={false}
+                              />
+                              <XAxis type="number" domain={[-1, 1]} hide />
+                              <YAxis
+                                dataKey="name"
+                                type="category"
+                                width={100}
+                                tick={{ fontSize: 10 }}
+                                interval={0}
+                              />
+                              <RechartsTooltip
+                                formatter={(value) => value + "%"}
+                                cursor={{ fill: "transparent" }}
+                              />
+                              <ReferenceLine x={0} stroke="#000" />
+                              <Bar dataKey="value" barSize={15} maxBarSize={15}>
+                                {correlations.map((entry, index) => (
+                                  <Cell
+                                    key={`cell-${index}`}
+                                    fill={
+                                      entry.value >= 0 ? "#2563eb" : "#ef4444"
+                                    }
+                                  />
+                                ))}
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        ) : (
+                          <div className="h-full flex items-center justify-center text-slate-400 text-sm">
+                            No significant correlation found.
+                          </div>
+                        )}
                       </div>
                     </motion.div>
                   )}
