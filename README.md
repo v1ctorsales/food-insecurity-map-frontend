@@ -26,9 +26,6 @@ frontend/
 │
 ├── src/
 │   ├── components/     # Reusable UI components (maps, charts)
-│   ├── pages/          # Application views
-│   ├── services/       # API communication
-│   ├── styles/         # Global and component styles
 │   ├── utils/          # Helper functions
 │   ├── App.jsx
 │   └── main.jsx
